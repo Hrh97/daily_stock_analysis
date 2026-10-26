@@ -4176,7 +4176,7 @@ Output strictly in the following JSON format. This is a complete Decision Dashbo
             # 设置生成配置
             generation_config = {
                 "temperature": config.llm_temperature,
-                "max_output_tokens": 8192,
+                "max_output_tokens": 32768,
             }
 
             logger.info(f"[LLM调用] 开始调用 {model_name}...")
@@ -4983,13 +4983,13 @@ Generate the Decision Dashboard for **{stock_name}({code})**, output strictly in
             prompt += f"""
 ### ⚠️ Important: output the correct stock name format
 The correct stock name format is "Stock name (stock code)", e.g. "Apple (AAPL)".
-If the stock name shown above is "Stock {code}" or incorrect, **state the correct company name explicitly** at the beginning of the analysis.
+If the stock name shown above is "Stock {code}" or incorrect, put the correct company name in the JSON `stock_name` field. Output only the JSON object, with no text outside it.
 """
         else:
             prompt += f"""
 ### ⚠️ 重要：输出正确的股票名称格式
 正确的股票名称格式为“股票名称（股票代码）”，例如“贵州茅台（600519）”。
-如果上方显示的股票名称为"股票{code}"或不正确，请在分析开头**明确输出该股票的正确中文全称**。
+如果上方显示的股票名称为"股票{code}"或不正确，请在 JSON 的 `stock_name` 字段中**输出该股票的正确中文全称**；只输出 JSON 对象，不要输出任何 JSON 以外的文字。
 """
         if english and use_legacy_default_prompt:
             prompt += """
@@ -5043,7 +5043,7 @@ If the stock name shown above is "Stock {code}" or incorrect, **state the correc
 - **News time compliance**: `latest_news`, `risk_alerts` and `positive_catalysts` must not contain information older than the last {news_window_days} days or with an unknown date
 - **Technical consistency**: never use mutually exclusive conclusions such as "bearish alignment" and "bullish alignment" as valid evidence at the same time; if fundamentals/events conflict with technicals, state explicitly "event-led, technicals not yet confirmed" or "fundamentals lean positive, but technicals are not yet confirmed"
 
-Output the complete Decision Dashboard in JSON format."""
+Output exactly one JSON object for the complete Decision Dashboard. Do not output Markdown headings, code fences, or any explanatory text."""
         else:
             prompt += f"""
 
@@ -5056,7 +5056,7 @@ Output the complete Decision Dashboard in JSON format."""
 - **消息面时间合规**：`latest_news`、`risk_alerts`、`positive_catalysts` 不得包含超出近{news_window_days}日或时间未知的信息
 - **技术面一致性**：严禁把“空头排列”和“多头排列”等互斥结论同时当作有效依据；若基本面/事件面与技术面冲突，必须明确写“事件先行、技术待确认”或“基本面偏多，但技术面尚未确认”
  
-请输出完整的 JSON 格式决策仪表盘。"""
+请只输出一个完整的 JSON 格式决策仪表盘对象；不要输出 Markdown 标题、代码块围栏或任何解释文字。"""
 
         if report_language == "en":
             prompt += """
