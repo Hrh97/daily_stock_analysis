@@ -4,6 +4,19 @@ from unittest.mock import patch, MagicMock
 from src.notification_sender.dingtalk_sender import DingtalkSender
 from src.config import Config
 
+
+REPORT_WITH_SUMMARY = """# 🎯 2026-10-22 决策仪表盘
+
+## 📊 分析结果摘要
+
+🟠 **比亚迪(002594)**: 减仓 | 评分 26 | 看空
+
+## 🟠 比亚迪 (002594)
+
+> **一句话决策**: 空头排列资金流出，持仓者反弹减仓
+"""
+
+
 class TestDingtalkSender(unittest.TestCase):
     def setUp(self):
         self.config = Config()
@@ -83,3 +96,102 @@ class TestDingtalkSender(unittest.TestCase):
         self.assertNotIn("[dsa-market-region]", payload["markdown"]["text"])
         self.assertIn("# 🎯 Market Review", payload["markdown"]["text"])
         self.assertIn("Body", payload["markdown"]["text"])
+
+    @patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_send_report_as_action_card_with_button(self, mock_post):
+        self.config.dingtalk_card_enabled = True
+        self.config.dingtalk_report_url = "http://127.0.0.1:8000"
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"errcode": 0, "errmsg": "ok"}
+        mock_post.return_value = mock_response
+
+        result = self.sender.send_to_dingtalk(REPORT_WITH_SUMMARY)
+
+        self.assertTrue(result)
+        mock_post.assert_called_once()
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["msgtype"], "actionCard")
+        card = payload["actionCard"]
+        self.assertIn("比亚迪", card["title"])
+        self.assertIn("减仓", card["text"])
+        self.assertEqual(card["singleTitle"], "打开分析工作台")
+        self.assertEqual(card["singleURL"], "http://127.0.0.1:8000")
+        self.assertNotIn("\n|", card["text"])
+
+    @patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_action_card_converts_tables_to_lines(self, mock_post):
+        self.config.dingtalk_card_enabled = True
+        self.config.dingtalk_report_url = "http://127.0.0.1:8000"
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"errcode": 0, "errmsg": "ok"}
+        mock_post.return_value = mock_response
+
+        report = REPORT_WITH_SUMMARY + (
+            "\n| 收盘 | 涨跌幅 |\n|------|------|\n| 80.02 | -0.84% |\n"
+        )
+        result = self.sender.send_to_dingtalk(report)
+
+        self.assertTrue(result)
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["msgtype"], "actionCard")
+        text = payload["actionCard"]["text"]
+        self.assertIn("**收盘** 80.02", text)
+        self.assertIn("**涨跌幅** -0.84%", text)
+        self.assertNotIn("|------", text)
+
+    @patch("src.notification_sender.dingtalk_sender.time.sleep")
+    @patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_long_report_sends_multiple_action_cards(self, mock_post, _mock_sleep):
+        self.config.dingtalk_card_enabled = True
+        self.config.dingtalk_report_url = "http://127.0.0.1:8000"
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"errcode": 0, "errmsg": "ok"}
+        mock_post.return_value = mock_response
+
+        filler = "\n".join(
+            f"- 检查项{i}：这是一段用来撑大报告体积的详细说明文字，确保超过单张卡片限制"
+            for i in range(400)
+        )
+        result = self.sender.send_to_dingtalk(REPORT_WITH_SUMMARY + "\n" + filler + "\n")
+
+        self.assertTrue(result)
+        self.assertGreaterEqual(mock_post.call_count, 2)
+        for index, call in enumerate(mock_post.call_args_list):
+            payload = call.kwargs["json"]
+            self.assertEqual(payload["msgtype"], "actionCard")
+            self.assertEqual(payload["actionCard"]["singleURL"], "http://127.0.0.1:8000")
+            self.assertIn(f"({index + 1}/{mock_post.call_count})", payload["actionCard"]["title"])
+            payload_bytes = len(
+                json.dumps(payload, ensure_ascii=False, separators=(',', ':')).encode("utf-8")
+            )
+            self.assertLessEqual(payload_bytes, 20000)
+
+    @patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_action_card_rejected_falls_back_to_markdown(self, mock_post):
+        self.config.dingtalk_card_enabled = True
+        self.config.dingtalk_report_url = "http://127.0.0.1:8000"
+        rejected = MagicMock()
+        rejected.json.return_value = {"errcode": 400, "errmsg": "invalid msgtype"}
+        accepted = MagicMock()
+        accepted.json.return_value = {"errcode": 0, "errmsg": "ok"}
+        mock_post.side_effect = [rejected, accepted]
+
+        result = self.sender.send_to_dingtalk(REPORT_WITH_SUMMARY)
+
+        self.assertTrue(result)
+        self.assertEqual(mock_post.call_count, 2)
+        self.assertEqual(mock_post.call_args_list[0].kwargs["json"]["msgtype"], "actionCard")
+        self.assertEqual(mock_post.call_args_list[1].kwargs["json"]["msgtype"], "markdown")
+
+    @patch("src.notification_sender.dingtalk_sender.requests.post")
+    def test_card_disabled_keeps_markdown(self, mock_post):
+        self.config.dingtalk_card_enabled = False
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"errcode": 0, "errmsg": "ok"}
+        mock_post.return_value = mock_response
+
+        result = self.sender.send_to_dingtalk(REPORT_WITH_SUMMARY)
+
+        self.assertTrue(result)
+        payload = mock_post.call_args.kwargs["json"]
+        self.assertEqual(payload["msgtype"], "markdown")

@@ -1161,6 +1161,8 @@ class Config:
     feishu_webhook_keyword: Optional[str] = None  # 自定义机器人关键词（可选）
     dingtalk_webhook_url: Optional[str] = None
     dingtalk_secret: Optional[str] = None
+    dingtalk_card_enabled: bool = True  # 使用 actionCard 精简卡片推送（失败自动回退 Markdown）
+    dingtalk_report_url: Optional[str] = None  # 卡片按钮跳转地址（如本机 WebUI）
 
     # 飞书应用机器人（App Bot）通知
     feishu_chat_id: Optional[str] = None  # 目标群会话 chat_id（群聊模式），或用户 open_id（P2P 模式）
@@ -2171,6 +2173,8 @@ class Config:
             feishu_webhook_keyword=os.getenv('FEISHU_WEBHOOK_KEYWORD'),
             dingtalk_webhook_url=os.getenv('DINGTALK_WEBHOOK_URL'),
             dingtalk_secret=os.getenv('DINGTALK_SECRET'),
+            dingtalk_card_enabled=os.getenv('DINGTALK_CARD_ENABLED', 'true').lower() == 'true',
+            dingtalk_report_url=os.getenv('DINGTALK_REPORT_URL') or None,
             
 
             feishu_chat_id=os.getenv('FEISHU_CHAT_ID'),

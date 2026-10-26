@@ -239,6 +239,8 @@ class SystemConfigService:
         "FEISHU_SEND_AS_FILE": ("feishu_send_as_file", "bool"),
         "DINGTALK_WEBHOOK_URL": ("dingtalk_webhook_url", "string"),
         "DINGTALK_SECRET": ("dingtalk_secret", "string"),
+        "DINGTALK_CARD_ENABLED": ("dingtalk_card_enabled", "bool"),
+        "DINGTALK_REPORT_URL": ("dingtalk_report_url", "string"),
         "FEISHU_APP_ID": ("feishu_app_id", "string"),
         "FEISHU_APP_SECRET": ("feishu_app_secret", "string"),
         "FEISHU_CHAT_ID": ("feishu_chat_id", "string"),

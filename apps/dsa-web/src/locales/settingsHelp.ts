@@ -549,6 +549,25 @@ const settingsHelpZhCN: SettingsHelpMap = {
     impact: ['填写后，发送器会为每次 Webhook 请求追加 timestamp 和 sign 参数。'],
     notes: ['关键词和加签可由钉钉同时要求，需分别满足。'],
   },
+  'settings.notification.DINGTALK_CARD_ENABLED': {
+    title: '钉钉详细卡片',
+    summary: '把完整报告转成无表格宽卡片分条推送，并附带工作台按钮。',
+    usage: '默认开启；关闭后恢复为原有 Markdown 分段消息。',
+    valueNotes: [
+      '钉钉卡片不渲染表格，开启后表格会自动转换为逐行文本。',
+      '卡片发送失败时自动回退为 Markdown，不影响送达。',
+    ],
+    impact: ['影响钉钉推送的排版与消息条数，不改变报告内容。'],
+    notes: ['长报告会按约 19KB 自动拆成多条卡片。'],
+  },
+  'settings.notification.DINGTALK_REPORT_URL': {
+    title: '钉钉卡片按钮地址',
+    summary: '设置卡片底部「打开分析工作台」按钮的跳转地址。',
+    usage: '通常填本机 WebUI 地址（http://127.0.0.1:8000）；留空则始终发送 Markdown。',
+    valueNotes: ['localhost 地址只能在运行 WebUI 的电脑上打开，手机外网无法访问。'],
+    impact: ['影响卡片按钮的跳转目标，不影响消息内容。'],
+    notes: ['如需外网访问，需要额外的内网穿透与登录保护方案。'],
+  },
   'settings.notification.webhooks': {
     title: '企业微信 Webhook',
     summary: '配置企业微信群机器人 Webhook，用于把分析报告推送到指定群。',
@@ -1779,6 +1798,25 @@ const settingsHelpEnUS: SettingsHelpMap = {
     valueNotes: ['This is a sensitive credential and is masked in Web settings.'],
     impact: ['When set, the sender appends timestamp and sign parameters to each webhook request.'],
     notes: ['DingTalk may require both keyword and signing security; configure each independently.'],
+  },
+  'settings.notification.DINGTALK_CARD_ENABLED': {
+    title: 'DingTalk Detail Cards',
+    summary: 'Sends the full report as table-free actionCards with a dashboard button.',
+    usage: 'Enabled by default; disable to restore the original markdown chunks.',
+    valueNotes: [
+      'DingTalk does not render markdown tables, so tables are converted to line-based text.',
+      'Falls back to markdown automatically when a card is rejected.',
+    ],
+    impact: ['Affects DingTalk formatting and message count, not report content.'],
+    notes: ['Long reports are split into multiple cards at about 19KB.'],
+  },
+  'settings.notification.DINGTALK_REPORT_URL': {
+    title: 'DingTalk Card Button URL',
+    summary: 'Sets the target of the "Open dashboard" button at the bottom of each card.',
+    usage: 'Usually the local WebUI address (http://127.0.0.1:8000); leave empty to always send markdown.',
+    valueNotes: ['A localhost URL only opens on the machine running the WebUI; phones outside the LAN cannot reach it.'],
+    impact: ['Affects the card button target, not message content.'],
+    notes: ['Remote access requires a separate tunnel with login protection.'],
   },
   'settings.notification.webhooks': {
     title: 'Enterprise WeChat Webhook',
