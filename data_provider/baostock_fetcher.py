@@ -287,6 +287,46 @@ class BaostockFetcher(BaseFetcher):
         
         return df
 
+    @retry(
+        stop=stop_after_attempt(2),
+        wait=wait_exponential(multiplier=1, min=1, max=10),
+        retry=retry_if_exception_type((ConnectionError, TimeoutError)),
+        before_sleep=before_sleep_log(logger, logging.WARNING),
+    )
+    def get_daily_history_with_turnover(
+        self,
+        stock_code: str,
+        start_date: str,
+        end_date: str,
+    ) -> pd.DataFrame:
+        """获取前复权日线及换手率，供本地筹码推演使用。"""
+        if _is_us_code(stock_code):
+            raise DataFetchError(f"BaostockFetcher 不支持美股 {stock_code}")
+        if _is_hk_market(stock_code):
+            raise DataFetchError(f"BaostockFetcher 不支持港股 {stock_code}")
+        if is_bse_code(stock_code):
+            raise DataFetchError(f"BaostockFetcher 不支持北交所 {stock_code}")
+
+        bs_code = self._convert_stock_code(stock_code)
+        with self._baostock_session() as bs:
+            result = bs.query_history_k_data_plus(
+                code=bs_code,
+                fields="date,high,low,close,turn,tradestatus",
+                start_date=start_date,
+                end_date=end_date,
+                frequency="d",
+                adjustflag="2",
+            )
+            if result.error_code != "0":
+                raise DataFetchError(f"Baostock 查询失败: {result.error_msg}")
+
+            rows = []
+            while result.next():
+                rows.append(result.get_row_data())
+            if not rows:
+                raise DataFetchError(f"Baostock 未查询到 {stock_code} 的换手率日线")
+            return pd.DataFrame(rows, columns=result.fields)
+
     def get_stock_name(self, stock_code: str) -> Optional[str]:
         """
         获取股票名称

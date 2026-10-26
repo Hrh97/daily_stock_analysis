@@ -240,6 +240,19 @@ def _is_meaningful_chip_distribution(chip: Any) -> bool:
     )
 
 
+def _is_placeholder_chip_distribution(chip: Any) -> bool:
+    """True when a provider returned the all-zero placeholder shape."""
+    profit_ratio = _coerce_chip_metric(getattr(chip, "profit_ratio", None))
+    concentration_90 = _coerce_chip_metric(getattr(chip, "concentration_90", None))
+    concentration_70 = _coerce_chip_metric(getattr(chip, "concentration_70", None))
+    return (
+        profit_ratio is not None
+        and abs(profit_ratio) <= 1e-12
+        and (concentration_90 is None or abs(concentration_90) <= 1e-12)
+        and (concentration_70 is None or abs(concentration_70) <= 1e-12)
+    )
+
+
 def _market_tag(code: str) -> str:
     """返回市场标签: cn/us/hk/jp/kr/tw."""
     if _is_us_market(code):
@@ -3008,7 +3021,7 @@ class DataFetcherManager:
                 )
                 chip = self._call_fetcher_method(fetcher, 'get_chip_distribution', stock_code)
                 latency_ms = int((time.time() - attempt_start) * 1000)
-                if _is_meaningful_chip_distribution(chip):
+                if _is_meaningful_chip_distribution(chip) and not _is_placeholder_chip_distribution(chip):
                     record_provider_run(
                         data_type="chip",
                         provider=fetcher_name,
@@ -3054,6 +3067,76 @@ class DataFetcherManager:
                 logger.warning(f"[筹码分布] {fetcher_name} 获取 {stock_code} 失败: {e}")
                 circuit_breaker.record_failure(source_key, str(e))
                 continue
+
+        logger.warning(f"[筹码分布] {stock_code} 常规数据源均失败，尝试本地推演兜底")
+
+        # Last-resort local CYQ simulation. It must stay after every real
+        # provider so a simulated distribution never replaces usable data.
+        if _market_tag(stock_code) != "cn" or _is_etf_code(stock_code) or is_bse_code(stock_code):
+            logger.warning(f"[筹码分布] {stock_code} 所有数据源均失败")
+            return None
+
+        baostock_fetcher = next(
+            (f for f in self._get_fetchers_snapshot() if f.name == "BaostockFetcher"),
+            None,
+        )
+        if baostock_fetcher is None:
+            logger.warning(f"[筹码分布] {stock_code} 所有数据源均失败")
+            return None
+
+        local_source_key = "local_chip"
+        if not circuit_breaker.is_available(local_source_key):
+            logger.debug("[熔断] 本地筹码推演处于熔断状态，跳过")
+            return None
+
+        attempt_start = time.time()
+        try:
+            record_provider_run_started(
+                data_type="chip",
+                provider="LocalChipFallback",
+                operation="get_chip_distribution",
+            )
+            from .a_stock_data_chip import build_local_chip_distribution
+
+            chip = build_local_chip_distribution(stock_code, baostock_fetcher)
+            latency_ms = int((time.time() - attempt_start) * 1000)
+            if _is_meaningful_chip_distribution(chip):
+                record_provider_run(
+                    data_type="chip",
+                    provider="LocalChipFallback",
+                    operation="get_chip_distribution",
+                    success=True,
+                    latency_ms=latency_ms,
+                    record_count=1,
+                )
+                circuit_breaker.record_success(local_source_key)
+                logger.info(f"[筹码分布] {stock_code} 使用本地推演兜底 (来源: BaostockFetcher)")
+                return chip
+
+            record_provider_run(
+                data_type="chip",
+                provider="LocalChipFallback",
+                operation="get_chip_distribution",
+                success=False,
+                latency_ms=latency_ms,
+                error_type="unstable",
+                error_message="local chip distribution unavailable or unstable",
+                record_count=0,
+            )
+            circuit_breaker.record_inconclusive(local_source_key)
+        except Exception as e:
+            error_type, error_reason = summarize_exception(e)
+            record_provider_run(
+                data_type="chip",
+                provider="LocalChipFallback",
+                operation="get_chip_distribution",
+                success=False,
+                latency_ms=int((time.time() - attempt_start) * 1000),
+                error_type=error_type,
+                error_message=error_reason,
+            )
+            circuit_breaker.record_failure(local_source_key, str(e))
+            logger.warning(f"[筹码分布] {stock_code} 本地推演失败: {e}")
 
         logger.warning(f"[筹码分布] {stock_code} 所有数据源均失败")
         return None
